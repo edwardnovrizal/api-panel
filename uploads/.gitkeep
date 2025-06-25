@@ -1,0 +1,3 @@
+# Folder ini akan menyimpan file uploads seperti app icons, documents, dll 
+# This file ensures the uploads directory is tracked by git
+# while ignoring the actual uploaded files for security reasons 
