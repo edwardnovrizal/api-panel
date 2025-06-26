@@ -1,6 +1,6 @@
 class ResponseUtil {
   // Success response
-  static success(res, data = null, message = "Operation successful", code = 200) {
+  static success(res, message = "Operation successful", data = null, code = 200) {
     return res.status(code).json({
       success: true,
       code: code,

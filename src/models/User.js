@@ -59,12 +59,12 @@ const userSchema = new mongoose.Schema({
   versionKey: false // Removes __v field
 });
 
-// Additional indexes (tidak duplicate dengan unique fields)
+// Database indexes
 userSchema.index({ createdAt: -1 }); // Index untuk sorting by creation date
 userSchema.index({ role: 1 }); // Index untuk filtering by role
 userSchema.index({ isActive: 1 }); // Index untuk filtering by status
 
-// Instance method untuk clean JSON output
+// Instance method untuk clean JSON output (essential untuk security)
 userSchema.methods.toJSON = function() {
   const user = this.toObject();
   // Remove password field dari JSON output
@@ -72,20 +72,20 @@ userSchema.methods.toJSON = function() {
   return user;
 };
 
-// Static methods
-userSchema.statics.findByEmail = function(email) {
-  return this.findOne({ email: email.toLowerCase() });
+// Instance method untuk checking permissions (business logic yang terkait erat dengan model)
+userSchema.methods.hasRole = function(role) {
+  return this.role === role;
 };
 
-userSchema.statics.findByUsername = function(username) {
-  return this.findOne({ username: username });
+userSchema.methods.isAdmin = function() {
+  return this.role === CONSTANTS.USER.ROLES.ADMIN || this.role === CONSTANTS.USER.ROLES.SUPER_ADMIN;
 };
 
-userSchema.statics.findByEmailWithPassword = function(email) {
-  return this.findOne({ email: email.toLowerCase() }).select("+password");
+userSchema.methods.isSuperAdmin = function() {
+  return this.role === CONSTANTS.USER.ROLES.SUPER_ADMIN;
 };
 
-// Pre-save middleware untuk data transformation
+// Pre-save middleware untuk data transformation (harus di model)
 userSchema.pre("save", function(next) {
   // Ensure email is lowercase (extra safety)
   if (this.email) {

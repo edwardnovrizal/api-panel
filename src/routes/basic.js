@@ -14,12 +14,12 @@ router.get("/", (req, res) => {
     dbStatus = "disconnected";
   }
 
-  return ResponseUtil.success(res, {
+  return ResponseUtil.success(res, "Service is running", {
     service: "API Panel Admin - Basic Version",
     status: "running",
     database: dbStatus,
     timestamp: new Date().toISOString()
-  }, "Service is running");
+  });
 });
 
 // Health check endpoint
@@ -32,13 +32,13 @@ router.get("/health", (req, res) => {
     dbStatus = "disconnected";
   }
 
-  return ResponseUtil.success(res, {
+  return ResponseUtil.success(res, "Health check successful", {
     status: "OK",
     service: "API Panel Admin",
     database: dbStatus,
     timestamp: new Date().toISOString(),
     uptime: process.uptime()
-  }, "Health check successful");
+  });
 });
 
 // Test database endpoint
@@ -53,10 +53,10 @@ router.get("/test-db", async (req, res) => {
       test_id: Math.random().toString(36).substring(7)
     });
     
-    return ResponseUtil.success(res, {
+    return ResponseUtil.success(res, "Database test successful", {
       insertedId: result.insertedId,
       timestamp: new Date().toISOString()
-    }, "Database test successful");
+    });
 
   } catch (error) {
     return ResponseUtil.serverError(res, "Database test failed");
@@ -69,10 +69,10 @@ router.get("/test-email", async (req, res) => {
     const emailTest = await EmailService.testConnection();
     
     if (emailTest.success) {
-      return ResponseUtil.success(res, {
+      return ResponseUtil.success(res, "Email service test successful", {
         emailService: "connected",
         timestamp: new Date().toISOString()
-      }, "Email service test successful");
+      });
     } else {
       return ResponseUtil.serverError(res, emailTest.message, "email");
     }
@@ -81,5 +81,7 @@ router.get("/test-email", async (req, res) => {
     return ResponseUtil.serverError(res, "Email service test failed", "email");
   }
 });
+
+
 
 module.exports = router;

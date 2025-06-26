@@ -107,7 +107,71 @@ class EmailService {
     }
   }
 
+  // Send password reset email
+  async sendPasswordResetEmail(email, resetToken, userName) {
+    try {
+      const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password?token=${resetToken}`;
+      
+      const mailOptions = {
+        from: {
+          name: CONSTANTS.EMAIL.FROM_NAME,
+          address: process.env.EMAIL_USER || 'noreply@apipanel.com'
+        },
+        to: email,
+        subject: CONSTANTS.EMAIL.SUBJECTS.PASSWORD_RESET,
+        html: EmailTemplates.getPasswordResetTemplate(resetToken, userName, resetUrl)
+      };
 
+      const result = await this.transporter.sendMail(mailOptions);
+      console.log("📧 Password reset email sent successfully:", result.messageId);
+      
+      return {
+        success: true,
+        messageId: result.messageId,
+        message: "Password reset email sent successfully"
+      };
+
+    } catch (error) {
+      console.error("💥 Failed to send password reset email:", error);
+      return {
+        success: false,
+        error: error.message,
+        message: "Failed to send password reset email"
+      };
+    }
+  }
+
+  // Send password reset confirmation email
+  async sendPasswordResetConfirmationEmail(email, userName) {
+    try {
+      const mailOptions = {
+        from: {
+          name: CONSTANTS.EMAIL.FROM_NAME,
+          address: process.env.EMAIL_USER || 'noreply@apipanel.com'
+        },
+        to: email,
+        subject: "Password Reset Successful - API Panel",
+        html: EmailTemplates.getPasswordResetConfirmationTemplate(userName)
+      };
+
+      const result = await this.transporter.sendMail(mailOptions);
+      console.log("📧 Password reset confirmation email sent successfully:", result.messageId);
+      
+      return {
+        success: true,
+        messageId: result.messageId,
+        message: "Password reset confirmation email sent successfully"
+      };
+
+    } catch (error) {
+      console.error("💥 Failed to send password reset confirmation email:", error);
+      return {
+        success: false,
+        error: error.message,
+        message: "Failed to send password reset confirmation email"
+      };
+    }
+  }
 
   // Test email connection
   async testConnection() {

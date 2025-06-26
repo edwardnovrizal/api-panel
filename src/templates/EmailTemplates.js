@@ -204,8 +204,8 @@ class EmailTemplates {
     );
   }
 
-  // Password Reset Email Template (untuk future use)
-  static getPasswordResetTemplate(resetToken, userName = "User") {
+  // Password Reset Email Template
+  static getPasswordResetTemplate(resetToken, userName = "User", resetUrl = "") {
     const content = `
       <div class="header">
           <h1>🔒 Password Reset Request</h1>
@@ -214,21 +214,33 @@ class EmailTemplates {
           <h2>Hello ${userName}!</h2>
           <p>We received a request to reset your password for your <strong>${CONSTANTS.EMAIL.FROM_NAME}</strong> account.</p>
           
+          ${resetUrl ? `
+          <div style="text-align: center; margin: 30px 0;">
+              <a href="${resetUrl}" class="btn" style="background-color: #dc3545;">Reset Password</a>
+          </div>
+          
+          <p>Or copy and paste this link in your browser:</p>
+          <div style="background-color: #f8f9fa; padding: 10px; border-radius: 4px; word-break: break-all; font-family: monospace; font-size: 12px;">
+              ${resetUrl}
+          </div>
+          ` : `
+          <p>Use this reset token:</p>
           <div class="otp-code">${resetToken}</div>
+          `}
           
           <div class="info-box">
               <p><strong>📋 Reset Instructions:</strong></p>
               <ul>
-                  <li>This reset code is valid for <strong>${CONSTANTS.OTP.EXPIRY_MINUTES} minutes</strong></li>
-                  <li>You have <strong>${CONSTANTS.OTP.MAX_ATTEMPTS} attempts</strong> to use this code</li>
-                  <li>Enter this code in the password reset form</li>
+                  <li>This reset link is valid for <strong>${CONSTANTS.OTP.RESET_PASSWORD_EXPIRY_MINUTES} minutes</strong></li>
+                  <li>You can only use this link once</li>
                   <li>Choose a strong, unique password</li>
+                  <li>Make sure your new password is different from your previous one</li>
               </ul>
           </div>
 
           <div class="warning-box">
               <p><strong>⚠️ Security Alert:</strong></p>
-              <p>If you didn't request this password reset, please ignore this email. Your account remains secure and no changes will be made.</p>
+              <p>If you didn't request this password reset, please ignore this email. Your account remains secure and no changes will be made. Consider changing your password if you suspect unauthorized access.</p>
           </div>
       </div>
     `;
@@ -236,6 +248,52 @@ class EmailTemplates {
     return this.getBaseTemplate(
       CONSTANTS.EMAIL.SUBJECTS.PASSWORD_RESET,
       "#dc3545",
+      content
+    );
+  }
+
+  // Password Reset Confirmation Email Template
+  static getPasswordResetConfirmationTemplate(userName = "User") {
+    const content = `
+      <div class="header">
+          <h1>✅ Password Reset Successful</h1>
+      </div>
+      <div class="content">
+          <h2>Hello ${userName}!</h2>
+          <p>Your password has been successfully reset for your <strong>${CONSTANTS.EMAIL.FROM_NAME}</strong> account.</p>
+          
+          <div class="success-box">
+              <p><strong>✅ Password Updated Successfully!</strong></p>
+              <p>Your account is now secured with your new password.</p>
+          </div>
+          
+          <div class="info-box">
+              <p><strong>🔐 Security Information:</strong></p>
+              <ul>
+                  <li>Password reset completed at: <strong>${new Date().toLocaleString()}</strong></li>
+                  <li>You can now log in with your new password</li>
+                  <li>All active sessions have been terminated for security</li>
+                  <li>You'll need to log in again on all devices</li>
+              </ul>
+          </div>
+
+          <div class="warning-box">
+              <p><strong>⚠️ Didn't reset your password?</strong></p>
+              <p>If you didn't perform this password reset, your account may be compromised. Please contact our support team immediately and consider:</p>
+              <ul>
+                  <li>Changing your password again</li>
+                  <li>Enabling two-factor authentication</li>
+                  <li>Reviewing your account activity</li>
+              </ul>
+          </div>
+
+          <p>Thank you for keeping your account secure!</p>
+      </div>
+    `;
+
+    return this.getBaseTemplate(
+      "Password Reset Successful - API Panel",
+      "#28a745",
       content
     );
   }

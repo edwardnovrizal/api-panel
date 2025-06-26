@@ -1,4 +1,4 @@
-const OTP = require("../models/OTP");
+const OTPRepository = require("../repositories/OTPRepository");
 const CONSTANTS = require("../config/constants");
 
 class OTPService {
@@ -13,23 +13,17 @@ class OTPService {
   static async createOTP(email, type = CONSTANTS.OTP.TYPES.EMAIL_VERIFICATION) {
     try {
       // Delete existing unused OTPs for this email and type
-      await OTP.deleteMany({ 
-        email: email.toLowerCase(), 
-        type: type, 
-        isUsed: false 
-      });
+      await OTPRepository.deleteByEmailAndType(email, type);
 
       const otpCode = this.generateOTPCode();
       const expiresAt = new Date(Date.now() + CONSTANTS.OTP.EXPIRY_MINUTES * 60 * 1000);
 
-      const newOTP = new OTP({
+      const newOTP = await OTPRepository.create({
         email: email.toLowerCase(),
         otp: otpCode,
         type: type,
         expiresAt: expiresAt
       });
-
-      await newOTP.save();
       
       console.log(`🔐 OTP created for ${email}: ${otpCode} (expires in ${CONSTANTS.OTP.EXPIRY_MINUTES} minutes)`);
       
@@ -52,13 +46,7 @@ class OTPService {
   // Verify OTP code
   static async verifyOTP(email, otpCode, type = CONSTANTS.OTP.TYPES.EMAIL_VERIFICATION) {
     try {
-      const otpRecord = await OTP.findOne({
-        email: email.toLowerCase(),
-        otp: otpCode.toString(),
-        type: type,
-        isUsed: false,
-        expiresAt: { $gt: new Date() }
-      });
+      const otpRecord = await OTPRepository.findByEmailCodeAndType(email, otpCode.toString(), type);
 
       if (!otpRecord) {
         console.log(`❌ Invalid OTP attempt for ${email}: ${otpCode}`);
@@ -69,13 +57,9 @@ class OTPService {
         };
       }
 
-      // Increment attempts
-      otpRecord.attempts += 1;
-      
       // Check max attempts
-      if (otpRecord.attempts > CONSTANTS.OTP.MAX_ATTEMPTS) {
-        otpRecord.isUsed = true;
-        await otpRecord.save();
+      if (otpRecord.attempts >= CONSTANTS.OTP.MAX_ATTEMPTS) {
+        await OTPRepository.markAsUsed(otpRecord._id);
         
         console.log(`❌ Max attempts exceeded for ${email}`);
         return { 
@@ -86,8 +70,7 @@ class OTPService {
       }
 
       // Mark as used
-      otpRecord.isUsed = true;
-      await otpRecord.save();
+      await OTPRepository.markAsUsed(otpRecord._id);
 
       console.log(`✅ OTP verified successfully for ${email}`);
       return { 
@@ -108,13 +91,7 @@ class OTPService {
   // Check if valid OTP exists
   static async hasValidOTP(email, type = CONSTANTS.OTP.TYPES.EMAIL_VERIFICATION) {
     try {
-      const otpRecord = await OTP.findOne({
-        email: email.toLowerCase(),
-        type: type,
-        isUsed: false,
-        expiresAt: { $gt: new Date() }
-      });
-
+      const otpRecord = await OTPRepository.findByEmailAndType(email, type);
       return otpRecord !== null;
     } catch (error) {
       console.error("💥 Error checking valid OTP:", error);
@@ -125,12 +102,7 @@ class OTPService {
   // Get OTP info (for debugging/admin purposes)
   static async getOTPInfo(email, type = CONSTANTS.OTP.TYPES.EMAIL_VERIFICATION) {
     try {
-      const otpRecord = await OTP.findOne({
-        email: email.toLowerCase(),
-        type: type,
-        isUsed: false,
-        expiresAt: { $gt: new Date() }
-      }).select('otp attempts expiresAt createdAt');
+      const otpRecord = await OTPRepository.findByEmailAndType(email, type);
 
       if (!otpRecord) {
         return { exists: false };
@@ -155,9 +127,7 @@ class OTPService {
   // Clean expired OTPs (maintenance function)
   static async cleanupExpiredOTPs() {
     try {
-      const result = await OTP.deleteMany({
-        expiresAt: { $lt: new Date() }
-      });
+      const result = await OTPRepository.cleanupExpired();
 
       console.log(`🧹 Cleaned up ${result.deletedCount} expired OTPs`);
       return {
@@ -176,21 +146,22 @@ class OTPService {
   // Invalidate all OTPs for user (useful for security)
   static async invalidateUserOTPs(email, type = null) {
     try {
-      const query = { 
-        email: email.toLowerCase(),
-        isUsed: false 
-      };
-
+      let result;
+      
       if (type) {
-        query.type = type;
+        result = await OTPRepository.deleteByEmailAndType(email, type);
+      } else {
+        // Delete all types for this email
+        result = await OTPRepository.bulkDelete({ 
+          email: email.toLowerCase(),
+          isUsed: false 
+        });
       }
 
-      const result = await OTP.updateMany(query, { isUsed: true });
-
-      console.log(`🔒 Invalidated ${result.modifiedCount} OTPs for ${email}`);
+      console.log(`🔒 Invalidated ${result.deletedCount} OTPs for ${email}`);
       return {
         success: true,
-        invalidatedCount: result.modifiedCount
+        invalidatedCount: result.deletedCount
       };
     } catch (error) {
       console.error("💥 Error invalidating OTPs:", error);

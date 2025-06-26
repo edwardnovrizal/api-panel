@@ -1,280 +1,313 @@
 const UserService = require("../services/UserService");
-const ValidationService = require("../services/ValidationService");
 const OTPService = require("../services/OTPService");
-const EmailService = require("../services/EmailService");
+const RefreshTokenService = require("../services/RefreshTokenService");
 const ResponseUtil = require("../utils/response");
-const CONSTANTS = require("../config/constants");
+const AuthValidation = require("../validations/AuthValidation");
 
 class AuthController {
   // Register new user
   static async register(req, res) {
     try {
-      console.log("📝 Register request received:", { ...req.body, password: "***" });
+      // Sanitize input
+      const sanitizedData = AuthValidation.sanitizeUserData(req.body);
       
-      // Validate input data
-      const validation = ValidationService.validateRegistrationData(req.body);
+      // Validate input
+      const validation = AuthValidation.validateRegistrationData(sanitizedData);
       if (!validation.isValid) {
-        console.log("❌ Validation failed:", validation.errors);
-        return ResponseUtil.validationError(res, validation.errors);
+        return ResponseUtil.error(res, "Validation failed", 400, validation.errors);
       }
 
-      // Sanitize input data
-      const sanitizedData = ValidationService.sanitizeUserData(req.body);
-      const { username, fullname, email, password } = sanitizedData;
-
-      // Check for existing email
-      const emailExists = await UserService.emailExists(email);
-      if (emailExists) {
-        console.log("❌ Email already exists:", email);
-        return ResponseUtil.conflict(res, CONSTANTS.MESSAGES.ERROR.EMAIL_EXISTS, "email");
-      }
-
-      // Check for existing username
-      const usernameExists = await UserService.usernameExists(username);
-      if (usernameExists) {
-        console.log("❌ Username already exists:", username);
-        return ResponseUtil.conflict(res, CONSTANTS.MESSAGES.ERROR.USERNAME_EXISTS, "username");
-      }
-
-      // Create user
-      console.log("🔄 Creating user account...");
-      const newUser = await UserService.createUser({ username, fullname, email, password });
-      console.log("✅ User created successfully:", newUser._id);
-
-      // Generate and send OTP
-      console.log("📧 Generating OTP for email verification...");
-      const otpResult = await OTPService.createOTP(email, CONSTANTS.OTP.TYPES.EMAIL_VERIFICATION);
+      // Register user
+      const result = await UserService.registerUser(sanitizedData);
       
-      if (!otpResult.success) {
-        console.error("💥 Failed to create OTP:", otpResult.error);
-        return ResponseUtil.serverError(res, "Failed to generate verification code", "otp");
-      }
-
-      // Send OTP email
-      const emailResult = await EmailService.sendOTPEmail(email, otpResult.otpCode, fullname);
-      
-      // Prepare response data
-      const responseData = {
-        user: {
-          _id: newUser._id,
-          username: newUser.username,
-          fullname: newUser.fullname,
-          email: newUser.email,
-          emailVerified: newUser.emailVerified,
-          isActive: newUser.isActive,
-          role: newUser.role,
-          createdAt: newUser.createdAt
-        },
-        verification: {
-          emailSent: emailResult.success,
-          otpExpiry: `${CONSTANTS.OTP.EXPIRY_MINUTES} minutes`,
-          maxAttempts: CONSTANTS.OTP.MAX_ATTEMPTS,
-          nextStep: emailResult.success 
-            ? "Please check your email and verify using the OTP code"
-            : "Registration successful but email sending failed. Please request OTP resend."
-        }
-      };
-
-      if (!emailResult.success) {
-        console.error("💥 Failed to send OTP email:", emailResult.error);
-        responseData.emailError = emailResult.message;
-      } else {
-        console.log("✅ OTP email sent successfully");
-      }
-
-      return ResponseUtil.success(res, responseData, CONSTANTS.MESSAGES.SUCCESS.REGISTRATION, 201);
-
+      return ResponseUtil.success(res, "Registration successful. Please check your email to verify your account.", result);
     } catch (error) {
-      return this.handleRegistrationError(res, error);
+      console.error("Registration error:", error);
+      
+      if (error.message.includes("already exists")) {
+        return ResponseUtil.error(res, error.message, 409, [
+          { field: error.message.includes("username") ? "username" : "email", message: error.message }
+        ]);
+      }
+      
+      return ResponseUtil.error(res, "Registration failed", 500, [
+        { field: "server", message: "An error occurred during registration" }
+      ]);
     }
   }
 
   // Verify email with OTP
   static async verifyEmail(req, res) {
     try {
-      console.log("🔐 Email verification request received");
+      // Sanitize input
+      const sanitizedData = AuthValidation.sanitizeUserData(req.body);
       
-      // Validate input data
-      const validation = ValidationService.validateEmailVerification(req.body);
+      // Validate input
+      const validation = AuthValidation.validateEmailVerification(sanitizedData);
       if (!validation.isValid) {
-        console.log("❌ Validation failed:", validation.errors);
-        return ResponseUtil.validationError(res, validation.errors);
+        return ResponseUtil.error(res, "Validation failed", 400, validation.errors);
       }
 
-      const { email, otp } = req.body;
-      const normalizedEmail = email.trim().toLowerCase();
-
-      // Check if user exists
-      const user = await UserService.findByEmail(normalizedEmail);
-      if (!user) {
-        console.log("❌ User not found:", normalizedEmail);
-        return ResponseUtil.notFound(res, CONSTANTS.MESSAGES.ERROR.USER_NOT_FOUND, "email");
-      }
-
-      // Check if email already verified
-      if (user.emailVerified) {
-        console.log("❌ Email already verified:", normalizedEmail);
-        return ResponseUtil.error(res, CONSTANTS.MESSAGES.ERROR.EMAIL_ALREADY_VERIFIED, 400, [
-          { field: "email", message: CONSTANTS.MESSAGES.ERROR.EMAIL_ALREADY_VERIFIED }
-        ]);
-      }
-
-      // Verify OTP
-      const otpResult = await OTPService.verifyOTP(normalizedEmail, otp.trim(), CONSTANTS.OTP.TYPES.EMAIL_VERIFICATION);
+      // Verify email
+      const result = await UserService.verifyEmail(sanitizedData.email, sanitizedData.otp);
       
-      if (!otpResult.success) {
-        console.log("❌ OTP verification failed:", otpResult.message);
-        return ResponseUtil.error(res, otpResult.message, 400, [
-          { field: otpResult.field || "otp", message: otpResult.message }
+      return ResponseUtil.success(res, "Email verified successfully", result);
+    } catch (error) {
+      console.error("Email verification error:", error);
+      
+      if (error.message.includes("Invalid") || error.message.includes("expired")) {
+        return ResponseUtil.error(res, error.message, 400, [
+          { field: "otp", message: error.message }
         ]);
       }
-
-      // Update user email verification status
-      user.emailVerified = true;
-      await user.save();
-      console.log("✅ Email verified successfully for user:", user._id);
-
-      // Send welcome email (non-blocking)
-      EmailService.sendWelcomeEmail(normalizedEmail, user.fullname)
-        .then(result => {
-          if (result.success) {
-            console.log("✅ Welcome email sent successfully");
-          } else {
-            console.log("⚠️ Welcome email failed:", result.message);
-          }
-        })
-        .catch(error => {
-          console.log("⚠️ Welcome email error:", error.message);
-        });
-
-      // Success response
-      const responseData = {
-        user: {
-          _id: user._id,
-          username: user.username,
-          fullname: user.fullname,
-          email: user.email,
-          emailVerified: user.emailVerified,
-          isActive: user.isActive,
-          role: user.role
-        },
-        verification: {
-          status: "completed",
-          verifiedAt: new Date().toISOString(),
-          welcomeEmailSent: true
-        }
-      };
-
-      return ResponseUtil.success(res, responseData, CONSTANTS.MESSAGES.SUCCESS.EMAIL_VERIFIED, 200);
-
-    } catch (error) {
-      console.error("💥 Email verification error:", error);
-      return ResponseUtil.serverError(res, `Email verification failed: ${error.message}`, "verification");
+      
+      return ResponseUtil.error(res, "Email verification failed", 500, [
+        { field: "server", message: "An error occurred during email verification" }
+      ]);
     }
   }
 
   // Resend OTP
   static async resendOTP(req, res) {
     try {
-      console.log("🔄 OTP resend request received");
+      // Sanitize input
+      const sanitizedData = AuthValidation.sanitizeUserData(req.body);
       
-      // Validate input data
-      const validation = ValidationService.validateResendOTP(req.body);
+      // Validate input
+      const validation = AuthValidation.validateResendOTP(sanitizedData);
       if (!validation.isValid) {
-        console.log("❌ Validation failed:", validation.errors);
-        return ResponseUtil.validationError(res, validation.errors);
+        return ResponseUtil.error(res, "Validation failed", 400, validation.errors);
       }
 
-      const { email } = req.body;
-      const normalizedEmail = email.trim().toLowerCase();
-
-      // Check if user exists
-      const user = await UserService.findByEmail(normalizedEmail);
-      if (!user) {
-        console.log("❌ User not found:", normalizedEmail);
-        return ResponseUtil.notFound(res, CONSTANTS.MESSAGES.ERROR.USER_NOT_FOUND, "email");
-      }
-
-      // Check if email already verified
-      if (user.emailVerified) {
-        console.log("❌ Email already verified:", normalizedEmail);
-        return ResponseUtil.error(res, CONSTANTS.MESSAGES.ERROR.EMAIL_ALREADY_VERIFIED, 400, [
-          { field: "email", message: CONSTANTS.MESSAGES.ERROR.EMAIL_ALREADY_VERIFIED }
+      // Resend OTP
+      await UserService.resendOTP(sanitizedData.email);
+      
+      return ResponseUtil.success(res, "OTP sent successfully");
+    } catch (error) {
+      console.error("Resend OTP error:", error);
+      
+      if (error.message.includes("not found") || error.message.includes("already verified")) {
+        return ResponseUtil.error(res, error.message, 400, [
+          { field: "email", message: error.message }
         ]);
       }
-
-      // Generate new OTP
-      const otpResult = await OTPService.createOTP(normalizedEmail, CONSTANTS.OTP.TYPES.EMAIL_VERIFICATION);
       
-      if (!otpResult.success) {
-        console.error("💥 Failed to create OTP:", otpResult.error);
-        return ResponseUtil.serverError(res, "Failed to generate verification code", "otp");
-      }
-
-      // Send OTP email
-      const emailResult = await EmailService.resendOTPEmail(normalizedEmail, otpResult.otpCode, user.fullname);
-      
-      if (!emailResult.success) {
-        console.error("💥 Failed to resend OTP email:", emailResult.error);
-        return ResponseUtil.serverError(res, CONSTANTS.MESSAGES.ERROR.EMAIL_SEND_FAILED, "email");
-      }
-
-      console.log("✅ OTP resent successfully");
-
-      const responseData = {
-        email: normalizedEmail,
-        verification: {
-          otpExpiry: `${CONSTANTS.OTP.EXPIRY_MINUTES} minutes`,
-          maxAttempts: CONSTANTS.OTP.MAX_ATTEMPTS,
-          resentAt: new Date().toISOString()
-        }
-      };
-
-      return ResponseUtil.success(res, responseData, CONSTANTS.MESSAGES.SUCCESS.OTP_RESENT, 200);
-
-    } catch (error) {
-      console.error("💥 Resend OTP error:", error);
-      return ResponseUtil.serverError(res, `Failed to resend OTP: ${error.message}`, "resend");
+      return ResponseUtil.error(res, "Failed to send OTP", 500, [
+        { field: "server", message: "An error occurred while sending OTP" }
+      ]);
     }
   }
 
-  // Handle registration errors (private method)
-  static handleRegistrationError(res, error) {
-    console.error("💥 Registration error details:", {
-      name: error.name,
-      message: error.message,
-      code: error.code,
-      stack: error.stack
-    });
-
-    // Handle Mongoose validation errors
-    if (error.name === "ValidationError") {
-      console.log("🔍 Mongoose validation error:", error.errors);
-      const validationErrors = [];
+  // User login
+  static async login(req, res) {
+    try {
+      // Sanitize input
+      const sanitizedData = AuthValidation.sanitizeUserData(req.body);
       
-      Object.keys(error.errors).forEach(key => {
-        validationErrors.push({
-          field: key,
-          message: error.errors[key].message
-        });
+      // Validate input
+      const validation = AuthValidation.validateLoginData(sanitizedData);
+      if (!validation.isValid) {
+        return ResponseUtil.error(res, "Invalid credentials", 401, validation.errors);
+      }
+
+      // Get device info
+      const userAgent = req.headers['user-agent'] || '';
+      const deviceInfo = AuthController.parseDeviceInfo(userAgent);
+
+      // Login user
+      const result = await UserService.loginUser({
+        username: sanitizedData.username,
+        password: sanitizedData.password,
+        deviceInfo
       });
+
+      // Set refresh token in httpOnly cookie
+      res.cookie('refreshToken', result.tokens.refreshToken, {
+        httpOnly: true,          // Tidak bisa diakses JavaScript
+        secure: process.env.NODE_ENV === 'production', // HTTPS only di production
+        sameSite: 'strict',      // CSRF protection
+        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days in milliseconds
+        path: '/api/auth'        // Only send to auth endpoints
+      });
+
+      // Remove refresh token from response (karena sudah di cookies)
+      const responseData = {
+        accessToken: result.tokens.accessToken,
+        tokenType: result.tokens.tokenType,
+        expiresIn: result.tokens.expiresIn,
+        user: result.user,
+        loginInfo: result.loginInfo
+        // refreshToken tidak dikirim ke frontend
+      };
       
-      return ResponseUtil.validationError(res, validationErrors);
+      return ResponseUtil.success(res, "Login successful", responseData);
+    } catch (error) {
+      console.error("Login error:", error);
+      
+      // Handle specific error cases
+      if (error.message === "Invalid credentials") {
+        return ResponseUtil.error(res, "Invalid credentials", 401, [
+          { field: "credentials", message: "Invalid credentials" }
+        ]);
+      }
+      
+      if (error.message === "Please verify your email address first") {
+        return ResponseUtil.error(res, "Please verify your email address first", 403, [
+          { field: "email", message: "Please verify your email address first" }
+        ]);
+      }
+      
+      if (error.message === "Account is inactive. Please contact administrator") {
+        return ResponseUtil.error(res, "Account is inactive. Please contact administrator", 403, [
+          { field: "account", message: "Account is inactive. Please contact administrator" }
+        ]);
+      }
+      
+      return ResponseUtil.error(res, "Login failed", 500, [
+        { field: "server", message: "An error occurred during login" }
+      ]);
+    }
+  }
+
+  // Refresh access token
+  static async refreshToken(req, res) {
+    try {
+      // Get refresh token from httpOnly cookie instead of request body
+      const refreshToken = req.cookies.refreshToken;
+      
+      if (!refreshToken) {
+        return ResponseUtil.error(res, "Refresh token is required", 401, [
+          { field: "refreshToken", message: "No refresh token found. Please login again." }
+        ]);
+      }
+
+      // Refresh token
+      const result = await RefreshTokenService.refreshAccessToken(refreshToken);
+      
+      if (!result.success) {
+        // Clear invalid refresh token cookie
+        res.clearCookie('refreshToken', { path: '/api/auth' });
+        
+        return ResponseUtil.error(res, result.message, 401, [
+          { field: "refreshToken", message: result.message }
+        ]);
+      }
+
+      // Update refresh token cookie if a new one was generated
+      if (result.refreshToken && result.refreshToken.token !== refreshToken) {
+        res.cookie('refreshToken', result.refreshToken.token, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'strict',
+          maxAge: 7 * 24 * 60 * 60 * 1000,
+          path: '/api/auth'
+        });
+      }
+
+      // Remove refresh token from response (karena sudah di cookies)
+      const responseData = {
+        accessToken: result.accessToken,
+        tokenType: result.tokenType,
+        expiresIn: result.expiresIn,
+        user: result.user
+        // refreshToken tidak dikirim ke frontend
+      };
+      
+      return ResponseUtil.success(res, "Token refreshed successfully", responseData);
+    } catch (error) {
+      console.error("Refresh token error:", error);
+      
+      // Clear potentially invalid cookie
+      res.clearCookie('refreshToken', { path: '/api/auth' });
+      
+      return ResponseUtil.error(res, "Token refresh failed", 401, [
+        { field: "refreshToken", message: "Please login again" }
+      ]);
+    }
+  }
+
+  // Logout user
+  static async logout(req, res) {
+    try {
+      // Get refresh token from cookie
+      const refreshToken = req.cookies.refreshToken;
+      
+      if (refreshToken) {
+        await RefreshTokenService.revokeRefreshToken(refreshToken);
+      }
+
+      // Clear refresh token cookie
+      res.clearCookie('refreshToken', { path: '/api/auth' });
+      
+      return ResponseUtil.success(res, "Logout successful");
+    } catch (error) {
+      console.error("Logout error:", error);
+      
+      // Always clear cookie and return success for logout
+      res.clearCookie('refreshToken', { path: '/api/auth' });
+      return ResponseUtil.success(res, "Logout successful");
+    }
+  }
+
+  // Logout from all devices
+  static async logoutAll(req, res) {
+    try {
+      const userId = req.user.userId;
+      
+      await RefreshTokenService.revokeAllUserTokens(userId);
+      
+      return ResponseUtil.success(res, "Logged out from all devices successfully");
+    } catch (error) {
+      console.error("Logout all error:", error);
+      return ResponseUtil.error(res, "Logout failed", 500, [
+        { field: "server", message: "An error occurred during logout" }
+      ]);
+    }
+  }
+
+  // Helper method to parse device info
+  static parseDeviceInfo(userAgent) {
+    const deviceInfo = {
+      userAgent: userAgent,
+      deviceType: 'desktop', // default
+      browser: 'unknown',
+      os: 'unknown'
+    };
+
+    // Simple device detection
+    if (/Mobile|Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(userAgent)) {
+      if (/iPad/i.test(userAgent)) {
+        deviceInfo.deviceType = 'tablet';
+      } else {
+        deviceInfo.deviceType = 'mobile';
+      }
     }
 
-    // Handle duplicate key error (unique constraint)
-    if (error.code === 11000) {
-      console.log("🔍 Duplicate key error:", error.keyPattern);
-      const field = Object.keys(error.keyPattern)[0];
-      const message = field === 'email' 
-        ? CONSTANTS.MESSAGES.ERROR.EMAIL_EXISTS 
-        : CONSTANTS.MESSAGES.ERROR.USERNAME_EXISTS;
-      return ResponseUtil.conflict(res, message, field);
+    // Simple browser detection
+    if (userAgent.includes('Chrome')) {
+      deviceInfo.browser = 'Chrome';
+    } else if (userAgent.includes('Firefox')) {
+      deviceInfo.browser = 'Firefox';
+    } else if (userAgent.includes('Safari')) {
+      deviceInfo.browser = 'Safari';
+    } else if (userAgent.includes('Edge')) {
+      deviceInfo.browser = 'Edge';
     }
 
-    // Handle any other errors
-    console.error("💥 Unhandled registration error:", error);
-    return ResponseUtil.serverError(res, `${CONSTANTS.MESSAGES.ERROR.REGISTRATION_FAILED}: ${error.message}`, "registration");
+    // Simple OS detection
+    if (userAgent.includes('Windows')) {
+      deviceInfo.os = 'Windows';
+    } else if (userAgent.includes('Mac')) {
+      deviceInfo.os = 'macOS';
+    } else if (userAgent.includes('Linux')) {
+      deviceInfo.os = 'Linux';
+    } else if (userAgent.includes('Android')) {
+      deviceInfo.os = 'Android';
+    } else if (userAgent.includes('iOS')) {
+      deviceInfo.os = 'iOS';
+    }
+
+    return deviceInfo;
   }
 }
 

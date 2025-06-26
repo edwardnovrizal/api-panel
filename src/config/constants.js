@@ -8,7 +8,8 @@ const APP_CONSTANTS = {
     TYPES: {
       EMAIL_VERIFICATION: "email_verification",
       PASSWORD_RESET: "password_reset"
-    }
+    },
+    RESET_PASSWORD_EXPIRY_MINUTES: 15
   },
 
   // User Configuration
@@ -49,13 +50,22 @@ const APP_CONSTANTS = {
     }
   },
 
+  // JWT Configuration
+  JWT: {
+    EXPIRES_IN: "24h",
+    ALGORITHM: "HS256"
+  },
+
   // Response Messages
   MESSAGES: {
     SUCCESS: {
       REGISTRATION: "User registered successfully. Please verify your email.",
       EMAIL_VERIFIED: "Email verification successful",
       OTP_SENT: "OTP sent successfully",
-      OTP_RESENT: "OTP resent successfully"
+      OTP_RESENT: "OTP resent successfully",
+      LOGIN: "Login successful",
+      PASSWORD_RESET_SENT: "Password reset instructions sent to your email",
+      PASSWORD_RESET: "Password reset successful"
     },
     ERROR: {
       VALIDATION_FAILED: "Validation failed",
@@ -66,7 +76,13 @@ const APP_CONSTANTS = {
       INVALID_OTP: "Invalid or expired OTP",
       MAX_ATTEMPTS_EXCEEDED: "Maximum verification attempts exceeded",
       EMAIL_SEND_FAILED: "Failed to send email",
-      REGISTRATION_FAILED: "Registration failed"
+      REGISTRATION_FAILED: "Registration failed",
+      INVALID_CREDENTIALS: "Invalid credentials",
+      EMAIL_NOT_VERIFIED: "Please verify your email address first",
+      ACCOUNT_INACTIVE: "Account is inactive. Please contact administrator",
+      INVALID_TOKEN: "Invalid or expired token",
+      INVALID_RESET_TOKEN: "Invalid or expired reset token",
+      PASSWORD_RESET_FAILED: "Password reset failed"
     }
   }
 };
