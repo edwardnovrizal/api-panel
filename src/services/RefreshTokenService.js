@@ -5,10 +5,17 @@ const CONSTANTS = require("../config/constants");
 
 class RefreshTokenService {
   // Generate refresh token for user
-  static async generateRefreshToken(userId, deviceInfo = {}) {
+  static async generateRefreshToken(userId, deviceInfo = {}, revokeExisting = true) {
     try {
-      // Create refresh token
+      // Revoke existing active tokens for this user (single session mode)
+      if (revokeExisting) {
+        console.log(`🔄 Revoking existing tokens for user: ${userId}`);
+        await RefreshTokenRepository.revokeAllUserTokens(userId, 'system');
+      }
+
+      // Create new refresh token
       const refreshToken = await RefreshTokenRepository.createToken(userId, deviceInfo);
+      console.log(`✅ New refresh token generated for user: ${userId}`);
 
       return {
         success: true,
@@ -30,10 +37,40 @@ class RefreshTokenService {
   // Generate new access token using refresh token
   static async refreshAccessToken(refreshTokenString) {
     try {
-      // Find valid refresh token
+      // Validate input
+      if (!refreshTokenString || typeof refreshTokenString !== 'string') {
+        return {
+          success: false,
+          message: "Invalid refresh token format",
+          code: 'INVALID_FORMAT'
+        };
+      }
+
+      // Find refresh token in database
       const refreshToken = await RefreshTokenRepository.findValidToken(refreshTokenString);
       
       if (!refreshToken) {
+        // Check if token exists at all (could be expired or revoked)
+        const existingToken = await RefreshTokenRepository.findByToken(refreshTokenString);
+        
+        if (existingToken) {
+          if (!existingToken.isActive) {
+            return {
+              success: false,
+              message: "Refresh token has been revoked",
+              code: 'TOKEN_REVOKED'
+            };
+          }
+          
+          if (existingToken.expiresAt < new Date()) {
+            return {
+              success: false,
+              message: "Refresh token has expired",
+              code: 'TOKEN_EXPIRED'
+            };
+          }
+        }
+        
         return {
           success: false,
           message: "Invalid or expired refresh token",
@@ -41,10 +78,19 @@ class RefreshTokenService {
         };
       }
 
+      // Check if user exists and is populated
+      if (!refreshToken.userId) {
+        return {
+          success: false,
+          message: "User associated with token not found",
+          code: 'USER_NOT_FOUND'
+        };
+      }
+
       // Check if user is still active
-      if (!refreshToken.userId || !refreshToken.userId.isActive) {
+      if (!refreshToken.userId.isActive) {
         // Revoke token if user is inactive
-        await refreshToken.revoke('system');
+        await RefreshTokenRepository.revokeToken(refreshTokenString, 'system');
         return {
           success: false,
           message: "User account is inactive",
@@ -90,7 +136,9 @@ class RefreshTokenService {
           _id: refreshToken.userId._id,
           username: refreshToken.userId.username,
           email: refreshToken.userId.email,
-          role: refreshToken.userId.role
+          role: refreshToken.userId.role,
+          emailVerified: refreshToken.userId.emailVerified,
+          isActive: refreshToken.userId.isActive
         },
         refreshToken: {
           token: refreshToken.token,
@@ -104,6 +152,7 @@ class RefreshTokenService {
       return {
         success: false,
         message: "Failed to refresh access token",
+        code: 'INTERNAL_ERROR',
         error: error.message
       };
     }
@@ -229,6 +278,53 @@ class RefreshTokenService {
     } catch (error) {
       console.error("💥 Cleanup expired tokens error:", error);
       return null;
+    }
+  }
+
+  // Debug token status (for development/troubleshooting)
+  static async debugTokenStatus(refreshTokenString) {
+    try {
+      if (!refreshTokenString) {
+        return { error: "No token provided" };
+      }
+
+      // Find token (including inactive/expired)
+      const token = await RefreshTokenRepository.findByToken(refreshTokenString);
+      
+      if (!token) {
+        return { error: "Token not found in database" };
+      }
+
+      const now = new Date();
+      const status = {
+        exists: true,
+        isActive: token.isActive,
+        isExpired: token.expiresAt < now,
+        expiresAt: token.expiresAt,
+        createdAt: token.createdAt,
+        lastUsed: token.lastUsed,
+        revokedAt: token.revokedAt,
+        revokedBy: token.revokedBy,
+        deviceInfo: token.deviceInfo,
+        timeUntilExpiry: token.expiresAt > now ? Math.floor((token.expiresAt - now) / 1000 / 60) + ' minutes' : 'expired'
+      };
+
+      // Check user status if token is linked
+      if (token.userId) {
+        const user = await RefreshTokenRepository.findValidToken(refreshTokenString);
+        status.userExists = !!user;
+        
+        if (user && user.userId) {
+          status.userActive = user.userId.isActive;
+          status.userEmailVerified = user.userId.emailVerified;
+          status.username = user.userId.username;
+          status.userEmail = user.userId.email;
+        }
+      }
+
+      return status;
+    } catch (error) {
+      return { error: error.message };
     }
   }
 

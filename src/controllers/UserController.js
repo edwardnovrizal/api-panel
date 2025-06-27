@@ -44,17 +44,22 @@ class UserController {
     try {
       const userId = req.user.userId;
       
-      // Sanitize input
-      const sanitizedData = UserValidation.sanitizeUserData(req.body);
+      // Check if request body exists
+      if (!req.body) {
+        return ResponseUtil.error(res, "Request body is required", 400, [
+          { field: "body", message: "Request body is required" }
+        ]);
+      }
       
       // Validate input
-      const validation = UserValidation.validateProfileUpdate(sanitizedData);
+      const validation = UserValidation.validateProfileUpdate(req.body);
       if (!validation.isValid) {
         return ResponseUtil.error(res, "Validation failed", 400, validation.errors);
       }
 
-      // Update profile
-      const updatedUser = await UserService.updateProfile(userId, sanitizedData);
+      // Clean and update profile
+      const cleanData = UserValidation.cleanData(req.body);
+      const updatedUser = await UserService.updateProfile(userId, cleanData);
       
       const profile = {
         _id: updatedUser._id,

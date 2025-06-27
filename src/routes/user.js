@@ -5,14 +5,14 @@ const AuthController = require("../controllers/AuthController");
 const UserController = require("../controllers/UserController");
 const PasswordController = require("../controllers/PasswordController");
 
-// User profile routes (protected with auto-refresh)
-router.get("/profile", AuthMiddleware.verifyTokenWithRefresh, UserController.getProfile);
-router.put("/profile", AuthMiddleware.verifyTokenWithRefresh, UserController.updateProfile);
+// User profile routes (protected - manual refresh required)
+router.get("/profile", AuthMiddleware.verifyToken, UserController.getProfile);
+router.put("/profile", AuthMiddleware.verifyToken, UserController.updateProfile);
 
-// Change password (authenticated users with auto-refresh)
-router.post("/change-password", AuthMiddleware.verifyTokenWithRefresh, PasswordController.changePassword);
+// Change password (authenticated users - manual refresh required)
+router.post("/change-password", AuthMiddleware.verifyToken, PasswordController.changePassword);
 
-// Session management routes (authenticated users with auto-refresh)
-router.post("/logout-all", AuthMiddleware.verifyTokenWithRefresh, AuthController.logoutAll);
+// Session management routes (authenticated users - manual refresh required)
+router.post("/logout-all", AuthMiddleware.verifyToken, AuthController.logoutAll);
 
 module.exports = router; 

@@ -100,15 +100,8 @@ class PasswordResetService {
 
       // Send confirmation email (non-blocking)
       EmailService.sendPasswordResetConfirmationEmail(user.email, user.fullname)
-        .then(result => {
-          if (result.success) {
-            console.log("✅ Password reset confirmation email sent");
-          } else {
-            console.log("⚠️ Password reset confirmation email failed:", result.message);
-          }
-        })
-        .catch(error => {
-          console.log("⚠️ Password reset confirmation email error:", error.message);
+        .catch(() => {
+          // Email notification failure should not affect the main operation
         });
 
       return {

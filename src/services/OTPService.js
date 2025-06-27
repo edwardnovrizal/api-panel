@@ -25,7 +25,7 @@ class OTPService {
         expiresAt: expiresAt
       });
       
-      console.log(`🔐 OTP created for ${email}: ${otpCode} (expires in ${CONSTANTS.OTP.EXPIRY_MINUTES} minutes)`);
+
       
       return {
         success: true,
@@ -49,7 +49,7 @@ class OTPService {
       const otpRecord = await OTPRepository.findByEmailCodeAndType(email, otpCode.toString(), type);
 
       if (!otpRecord) {
-        console.log(`❌ Invalid OTP attempt for ${email}: ${otpCode}`);
+
         return { 
           success: false, 
           message: CONSTANTS.MESSAGES.ERROR.INVALID_OTP,
@@ -61,7 +61,7 @@ class OTPService {
       if (otpRecord.attempts >= CONSTANTS.OTP.MAX_ATTEMPTS) {
         await OTPRepository.markAsUsed(otpRecord._id);
         
-        console.log(`❌ Max attempts exceeded for ${email}`);
+
         return { 
           success: false, 
           message: CONSTANTS.MESSAGES.ERROR.MAX_ATTEMPTS_EXCEEDED,
@@ -72,7 +72,7 @@ class OTPService {
       // Mark as used
       await OTPRepository.markAsUsed(otpRecord._id);
 
-      console.log(`✅ OTP verified successfully for ${email}`);
+
       return { 
         success: true, 
         message: "OTP verified successfully" 
@@ -158,7 +158,7 @@ class OTPService {
         });
       }
 
-      console.log(`🔒 Invalidated ${result.deletedCount} OTPs for ${email}`);
+
       return {
         success: true,
         invalidatedCount: result.deletedCount

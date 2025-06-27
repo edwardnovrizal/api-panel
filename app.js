@@ -33,9 +33,16 @@ async function startServer() {
         // Start Express server
         app.listen(PORT, () => {
             console.log(`🚀 Server running on port ${PORT}`);
-            console.log(`📍 URL: http://localhost:${PORT}`);
-            console.log(`🏥 Health: http://localhost:${PORT}/health`);
-            console.log(`🧪 Test DB: http://localhost:${PORT}/test-db`);
+            console.log(`📍 URL: http://localhost:${PORT}/v1/api`);
+            console.log(`🏥 Health: http://localhost:${PORT}/v1/api/health`);
+            
+            // Development only URLs
+            if (process.env.NODE_ENV !== "production") {
+                console.log(`🧪 Test DB: http://localhost:${PORT}/v1/api/test-db`);
+                console.log(`📧 Test Email: http://localhost:${PORT}/v1/api/test-email`);
+                console.log(`🔍 Debug Token: POST http://localhost:${PORT}/v1/api/debug-token`);
+                console.log(`🍪 Debug Cookies: GET http://localhost:${PORT}/v1/api/debug-cookies`);
+            }
         });
     } catch (error) {
         console.error('❌ Failed to start server:', error);

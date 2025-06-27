@@ -51,7 +51,7 @@ class EmailService {
       };
 
       const result = await this.transporter.sendMail(mailOptions);
-      console.log("📧 OTP Email sent successfully:", result.messageId);
+
       
       return {
         success: true,
@@ -89,7 +89,7 @@ class EmailService {
       };
 
       const result = await this.transporter.sendMail(mailOptions);
-      console.log("📧 Welcome email sent successfully:", result.messageId);
+
       
       return {
         success: true,
@@ -123,7 +123,7 @@ class EmailService {
       };
 
       const result = await this.transporter.sendMail(mailOptions);
-      console.log("📧 Password reset email sent successfully:", result.messageId);
+
       
       return {
         success: true,
@@ -155,7 +155,7 @@ class EmailService {
       };
 
       const result = await this.transporter.sendMail(mailOptions);
-      console.log("📧 Password reset confirmation email sent successfully:", result.messageId);
+
       
       return {
         success: true,

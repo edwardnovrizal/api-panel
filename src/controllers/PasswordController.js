@@ -8,17 +8,22 @@ class PasswordController {
   // Forgot password - request password reset
   static async forgotPassword(req, res) {
     try {
-      // Sanitize input
-      const sanitizedData = PasswordValidation.sanitizePasswordData(req.body);
-      
+      // Check if request body exists
+      if (!req.body) {
+        return ResponseUtil.error(res, "Request body is required", 400, [
+          { field: "body", message: "Request body is required" }
+        ]);
+      }
+
       // Validate input
-      const validation = PasswordValidation.validateForgotPassword(sanitizedData);
+      const validation = PasswordValidation.validateForgotPassword(req.body);
       if (!validation.isValid) {
         return ResponseUtil.error(res, "Validation failed", 400, validation.errors);
       }
 
-      // Request password reset
-      const result = await PasswordResetService.requestPasswordReset(sanitizedData.email);
+      // Clean and request password reset
+      const cleanData = PasswordValidation.cleanData(req.body);
+      const result = await PasswordResetService.requestPasswordReset(cleanData.email);
       
       return ResponseUtil.success(res, "Password reset instructions sent to your email", result);
     } catch (error) {
@@ -62,19 +67,24 @@ class PasswordController {
   // Reset password with token
   static async resetPassword(req, res) {
     try {
-      // Sanitize input
-      const sanitizedData = PasswordValidation.sanitizePasswordData(req.body);
-      
+      // Check if request body exists
+      if (!req.body) {
+        return ResponseUtil.error(res, "Request body is required", 400, [
+          { field: "body", message: "Request body is required" }
+        ]);
+      }
+
       // Validate input
-      const validation = PasswordValidation.validateResetPassword(sanitizedData);
+      const validation = PasswordValidation.validateResetPassword(req.body);
       if (!validation.isValid) {
         return ResponseUtil.error(res, "Validation failed", 400, validation.errors);
       }
 
-      // Reset password
+      // Clean and reset password
+      const cleanData = PasswordValidation.cleanData(req.body);
       const result = await PasswordResetService.resetPassword(
-        sanitizedData.token, 
-        sanitizedData.newPassword
+        cleanData.token, 
+        cleanData.newPassword
       );
       
       return ResponseUtil.success(res, "Password reset successfully", result);
@@ -96,11 +106,15 @@ class PasswordController {
   // Change password for authenticated users
   static async changePassword(req, res) {
     try {
-      // Sanitize input
-      const sanitizedData = PasswordValidation.sanitizePasswordData(req.body);
-      
+      // Check if request body exists
+      if (!req.body) {
+        return ResponseUtil.error(res, "Request body is required", 400, [
+          { field: "body", message: "Request body is required" }
+        ]);
+      }
+
       // Validate input
-      const validation = PasswordValidation.validateChangePassword(sanitizedData);
+      const validation = PasswordValidation.validateChangePassword(req.body);
       if (!validation.isValid) {
         return ResponseUtil.error(res, "Validation failed", 400, validation.errors);
       }
@@ -113,9 +127,10 @@ class PasswordController {
         ]);
       }
 
-      // Verify current password
+      // Clean data and verify current password
+      const cleanData = PasswordValidation.cleanData(req.body);
       const isCurrentPasswordValid = await bcrypt.compare(
-        sanitizedData.currentPassword, 
+        cleanData.currentPassword, 
         user.password
       );
       
@@ -126,7 +141,7 @@ class PasswordController {
       }
 
       // Update password
-      await UserService.changePassword(user._id, sanitizedData.newPassword);
+      await UserService.changePassword(user._id, cleanData.newPassword);
       
       const result = {
         user: {

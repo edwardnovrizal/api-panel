@@ -45,19 +45,19 @@ class UserService {
 
       // Check if email is verified - return specific message
       if (!user.emailVerified) {
-        return { 
-          success: false, 
+        return {
+          success: false,
           message: CONSTANTS.MESSAGES.ERROR.EMAIL_NOT_VERIFIED,
-          code: 'EMAIL_NOT_VERIFIED'
+          code: "EMAIL_NOT_VERIFIED",
         };
       }
 
       // Check if account is active - return specific message
       if (!user.isActive) {
-        return { 
-          success: false, 
+        return {
+          success: false,
           message: CONSTANTS.MESSAGES.ERROR.ACCOUNT_INACTIVE,
-          code: 'ACCOUNT_INACTIVE'
+          code: "ACCOUNT_INACTIVE",
         };
       }
 
@@ -71,19 +71,18 @@ class UserService {
         isActive: user.isActive,
         role: user.role,
         createdAt: user.createdAt,
-        updatedAt: user.updatedAt
+        updatedAt: user.updatedAt,
       };
 
-      return { 
-        success: true, 
-        user: userWithoutPassword 
+      return {
+        success: true,
+        user: userWithoutPassword,
       };
-
     } catch (error) {
       console.error("💥 Authentication error:", error);
-      return { 
-        success: false, 
-        message: CONSTANTS.MESSAGES.ERROR.INVALID_CREDENTIALS
+      return {
+        success: false,
+        message: CONSTANTS.MESSAGES.ERROR.INVALID_CREDENTIALS,
       };
     }
   }
@@ -109,7 +108,7 @@ class UserService {
       fullname: userData.fullname.trim(),
       email: ModelHelpers.normalizeEmail(userData.email),
       password: hashedPassword,
-      role: userData.role || CONSTANTS.USER.DEFAULT_ROLE
+      role: userData.role || CONSTANTS.USER.DEFAULT_ROLE,
     };
 
     return await UserRepository.create(userToCreate);
@@ -123,8 +122,8 @@ class UserService {
   // Update user
   static async updateUser(userId, updateData) {
     // Remove sensitive fields dari update
-    const sanitizedData = ModelHelpers.excludeFields(updateData, ['password', '_id']);
-    
+    const sanitizedData = ModelHelpers.excludeFields(updateData, ["password", "_id"]);
+
     if (sanitizedData.email) {
       sanitizedData.email = ModelHelpers.normalizeEmail(sanitizedData.email);
     }
@@ -135,7 +134,7 @@ class UserService {
   // Change password
   static async changePassword(userId, newPassword) {
     const hashedPassword = await bcrypt.hash(newPassword, CONSTANTS.USER.PASSWORD.SALT_ROUNDS);
-    
+
     return await UserRepository.updateById(userId, { password: hashedPassword });
   }
 
@@ -176,14 +175,14 @@ class UserService {
 
     // Generate and send OTP
     const otpResult = await OTPService.createOTP(email, CONSTANTS.OTP.TYPES.EMAIL_VERIFICATION);
-    
+
     if (!otpResult.success) {
       throw new Error("Failed to generate verification code");
     }
 
     // Send OTP email
     const emailResult = await EmailService.sendOTPEmail(email, otpResult.otpCode, fullname);
-    
+
     return {
       user: {
         _id: newUser._id,
@@ -193,13 +192,13 @@ class UserService {
         emailVerified: newUser.emailVerified,
         isActive: newUser.isActive,
         role: newUser.role,
-        createdAt: newUser.createdAt
+        createdAt: newUser.createdAt,
       },
       verification: {
         emailSent: emailResult.success,
         otpExpiry: `${CONSTANTS.OTP.EXPIRY_MINUTES} minutes`,
-        maxAttempts: CONSTANTS.OTP.MAX_ATTEMPTS
-      }
+        maxAttempts: CONSTANTS.OTP.MAX_ATTEMPTS,
+      },
     };
   }
 
@@ -220,7 +219,7 @@ class UserService {
 
     // Verify OTP
     const otpResult = await OTPService.verifyOTP(normalizedEmail, otp.trim(), CONSTANTS.OTP.TYPES.EMAIL_VERIFICATION);
-    
+
     if (!otpResult.success) {
       throw new Error(otpResult.message);
     }
@@ -230,8 +229,9 @@ class UserService {
     await user.save();
 
     // Send welcome email (non-blocking)
-    EmailService.sendWelcomeEmail(normalizedEmail, user.fullname)
-      .catch(error => console.log("Welcome email error:", error.message));
+    EmailService.sendWelcomeEmail(normalizedEmail, user.fullname).catch(() => {
+      // Email notification failure should not affect registration
+    });
 
     return {
       user: {
@@ -241,12 +241,12 @@ class UserService {
         email: user.email,
         emailVerified: user.emailVerified,
         isActive: user.isActive,
-        role: user.role
+        role: user.role,
       },
       verification: {
         status: "completed",
-        verifiedAt: new Date().toISOString()
-      }
+        verifiedAt: new Date().toISOString(),
+      },
     };
   }
 
@@ -267,14 +267,14 @@ class UserService {
 
     // Generate new OTP
     const otpResult = await OTPService.createOTP(normalizedEmail, CONSTANTS.OTP.TYPES.EMAIL_VERIFICATION);
-    
+
     if (!otpResult.success) {
       throw new Error("Failed to generate verification code");
     }
 
     // Send OTP email
     const emailResult = await EmailService.resendOTPEmail(normalizedEmail, otpResult.otpCode, user.fullname);
-    
+
     if (!emailResult.success) {
       throw new Error("Failed to send verification email");
     }
@@ -284,8 +284,8 @@ class UserService {
       verification: {
         otpExpiry: `${CONSTANTS.OTP.EXPIRY_MINUTES} minutes`,
         maxAttempts: CONSTANTS.OTP.MAX_ATTEMPTS,
-        resentAt: new Date().toISOString()
-      }
+        resentAt: new Date().toISOString(),
+      },
     };
   }
 
@@ -295,14 +295,14 @@ class UserService {
 
     // Authenticate user
     const authResult = await this.authenticateUser(trimmedUsername, password);
-    
+
     if (!authResult.success) {
       // Handle different error types
-      if (authResult.code === 'EMAIL_NOT_VERIFIED') {
+      if (authResult.code === "EMAIL_NOT_VERIFIED") {
         throw new Error("Please verify your email address first");
       }
-      
-      if (authResult.code === 'ACCOUNT_INACTIVE') {
+
+      if (authResult.code === "ACCOUNT_INACTIVE") {
         throw new Error("Account is inactive. Please contact administrator");
       }
 
@@ -315,23 +315,16 @@ class UserService {
       userId: authResult.user._id,
       username: authResult.user.username,
       email: authResult.user.email,
-      role: authResult.user.role
+      role: authResult.user.role,
     };
 
-    const accessToken = jwt.sign(
-      tokenPayload, 
-      process.env.JWT_SECRET, 
-      { 
-        expiresIn: CONSTANTS.JWT.EXPIRES_IN,
-        algorithm: CONSTANTS.JWT.ALGORITHM
-      }
-    );
+    const accessToken = jwt.sign(tokenPayload, process.env.JWT_SECRET, {
+      expiresIn: CONSTANTS.JWT.EXPIRES_IN,
+      algorithm: CONSTANTS.JWT.ALGORITHM,
+    });
 
     // Generate refresh token
-    const refreshTokenResult = await RefreshTokenService.generateRefreshToken(
-      authResult.user._id, 
-      deviceInfo
-    );
+    const refreshTokenResult = await RefreshTokenService.generateRefreshToken(authResult.user._id, deviceInfo);
 
     return {
       user: authResult.user,
@@ -340,12 +333,12 @@ class UserService {
         refreshToken: refreshTokenResult.success ? refreshTokenResult.refreshToken : null,
         tokenType: "Bearer",
         expiresIn: CONSTANTS.JWT.EXPIRES_IN,
-        refreshExpiresAt: refreshTokenResult.success ? refreshTokenResult.expiresAt : null
+        refreshExpiresAt: refreshTokenResult.success ? refreshTokenResult.expiresAt : null,
       },
       loginInfo: {
         loginAt: new Date().toISOString(),
-        deviceType: deviceInfo.deviceType
-      }
+        deviceType: deviceInfo.deviceType,
+      },
     };
   }
 
@@ -360,19 +353,19 @@ class UserService {
     if (updateData.email) {
       const normalizedEmail = ModelHelpers.normalizeEmail(updateData.email);
       const existingUser = await UserRepository.findByEmail(normalizedEmail);
-      
+
       if (existingUser && existingUser._id.toString() !== userId) {
         throw new Error("Email already exists");
       }
-      
+
       updateData.email = normalizedEmail;
     }
 
     // Remove sensitive fields from update
-    const sanitizedData = ModelHelpers.excludeFields(updateData, ['password', '_id', 'username']);
-    
+    const sanitizedData = ModelHelpers.excludeFields(updateData, ["password", "_id", "username"]);
+
     return await UserRepository.updateById(userId, sanitizedData);
   }
 }
 
-module.exports = UserService; 
+module.exports = UserService;

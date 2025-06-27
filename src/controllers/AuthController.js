@@ -8,17 +8,22 @@ class AuthController {
   // Register new user
   static async register(req, res) {
     try {
-      // Sanitize input
-      const sanitizedData = AuthValidation.sanitizeUserData(req.body);
-      
+      // Check if request body exists
+      if (!req.body) {
+        return ResponseUtil.error(res, "Request body is required", 400, [
+          { field: "body", message: "Request body is required" }
+        ]);
+      }
+
       // Validate input
-      const validation = AuthValidation.validateRegistrationData(sanitizedData);
+      const validation = AuthValidation.validateRegistration(req.body);
       if (!validation.isValid) {
         return ResponseUtil.error(res, "Validation failed", 400, validation.errors);
       }
 
-      // Register user
-      const result = await UserService.registerUser(sanitizedData);
+      // Clean and register user
+      const cleanData = AuthValidation.cleanData(req.body);
+      const result = await UserService.registerUser(cleanData);
       
       return ResponseUtil.success(res, "Registration successful. Please check your email to verify your account.", result);
     } catch (error) {
@@ -39,17 +44,22 @@ class AuthController {
   // Verify email with OTP
   static async verifyEmail(req, res) {
     try {
-      // Sanitize input
-      const sanitizedData = AuthValidation.sanitizeUserData(req.body);
-      
+      // Check if request body exists
+      if (!req.body) {
+        return ResponseUtil.error(res, "Request body is required", 400, [
+          { field: "body", message: "Request body is required" }
+        ]);
+      }
+
       // Validate input
-      const validation = AuthValidation.validateEmailVerification(sanitizedData);
+      const validation = AuthValidation.validateEmailVerification(req.body);
       if (!validation.isValid) {
         return ResponseUtil.error(res, "Validation failed", 400, validation.errors);
       }
 
-      // Verify email
-      const result = await UserService.verifyEmail(sanitizedData.email, sanitizedData.otp);
+      // Clean and verify email
+      const cleanData = AuthValidation.cleanData(req.body);
+      const result = await UserService.verifyEmail(cleanData.email, cleanData.otp);
       
       return ResponseUtil.success(res, "Email verified successfully", result);
     } catch (error) {
@@ -70,17 +80,22 @@ class AuthController {
   // Resend OTP
   static async resendOTP(req, res) {
     try {
-      // Sanitize input
-      const sanitizedData = AuthValidation.sanitizeUserData(req.body);
-      
+      // Check if request body exists
+      if (!req.body) {
+        return ResponseUtil.error(res, "Request body is required", 400, [
+          { field: "body", message: "Request body is required" }
+        ]);
+      }
+
       // Validate input
-      const validation = AuthValidation.validateResendOTP(sanitizedData);
+      const validation = AuthValidation.validateResendOTP(req.body);
       if (!validation.isValid) {
         return ResponseUtil.error(res, "Validation failed", 400, validation.errors);
       }
 
-      // Resend OTP
-      await UserService.resendOTP(sanitizedData.email);
+      // Clean and resend OTP
+      const cleanData = AuthValidation.cleanData(req.body);
+      await UserService.resendOTP(cleanData.email);
       
       return ResponseUtil.success(res, "OTP sent successfully");
     } catch (error) {
@@ -101,11 +116,15 @@ class AuthController {
   // User login
   static async login(req, res) {
     try {
-      // Sanitize input
-      const sanitizedData = AuthValidation.sanitizeUserData(req.body);
-      
+      // Check if request body exists
+      if (!req.body) {
+        return ResponseUtil.error(res, "Request body is required", 400, [
+          { field: "body", message: "Request body is required" }
+        ]);
+      }
+
       // Validate input
-      const validation = AuthValidation.validateLoginData(sanitizedData);
+      const validation = AuthValidation.validateLogin(req.body);
       if (!validation.isValid) {
         return ResponseUtil.error(res, "Invalid credentials", 401, validation.errors);
       }
@@ -114,10 +133,11 @@ class AuthController {
       const userAgent = req.headers['user-agent'] || '';
       const deviceInfo = AuthController.parseDeviceInfo(userAgent);
 
-      // Login user
+      // Clean and login user
+      const cleanData = AuthValidation.cleanData(req.body);
       const result = await UserService.loginUser({
-        username: sanitizedData.username,
-        password: sanitizedData.password,
+        username: cleanData.username,
+        password: cleanData.password,
         deviceInfo
       });
 
@@ -127,7 +147,7 @@ class AuthController {
         secure: process.env.NODE_ENV === 'production', // HTTPS only di production
         sameSite: 'strict',      // CSRF protection
         maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days in milliseconds
-        path: '/api/auth'        // Only send to auth endpoints
+        path: '/v1/api/auth'     // Match actual route path
       });
 
       // Remove refresh token from response (karena sudah di cookies)
@@ -186,10 +206,43 @@ class AuthController {
       
       if (!result.success) {
         // Clear invalid refresh token cookie
-        res.clearCookie('refreshToken', { path: '/api/auth' });
+        res.clearCookie('refreshToken', { path: '/v1/api/auth' });
         
-        return ResponseUtil.error(res, result.message, 401, [
-          { field: "refreshToken", message: result.message }
+        // Handle specific error codes
+        let statusCode = 401;
+        let errorMessage = result.message;
+        
+        switch (result.code) {
+          case 'TOKEN_EXPIRED':
+            errorMessage = "Your session has expired. Please login again.";
+            break;
+          case 'TOKEN_REVOKED':
+            errorMessage = "Your session has been terminated. Please login again.";
+            break;
+          case 'USER_INACTIVE':
+            statusCode = 403;
+            errorMessage = "Your account has been deactivated. Please contact administrator.";
+            break;
+          case 'EMAIL_NOT_VERIFIED':
+            statusCode = 403;
+            errorMessage = "Please verify your email address to continue.";
+            break;
+          case 'USER_NOT_FOUND':
+            errorMessage = "User account not found. Please login again.";
+            break;
+          case 'INVALID_FORMAT':
+            errorMessage = "Invalid session format. Please login again.";
+            break;
+          case 'INTERNAL_ERROR':
+            statusCode = 500;
+            errorMessage = "Internal server error. Please try again.";
+            break;
+          default:
+            errorMessage = result.message || "Session validation failed. Please login again.";
+        }
+        
+        return ResponseUtil.error(res, errorMessage, statusCode, [
+          { field: "refreshToken", message: errorMessage }
         ]);
       }
 
@@ -200,7 +253,7 @@ class AuthController {
           secure: process.env.NODE_ENV === 'production',
           sameSite: 'strict',
           maxAge: 7 * 24 * 60 * 60 * 1000,
-          path: '/api/auth'
+          path: '/v1/api/auth'
         });
       }
 
@@ -218,10 +271,10 @@ class AuthController {
       console.error("Refresh token error:", error);
       
       // Clear potentially invalid cookie
-      res.clearCookie('refreshToken', { path: '/api/auth' });
+      res.clearCookie('refreshToken', { path: '/v1/api/auth' });
       
-      return ResponseUtil.error(res, "Token refresh failed", 401, [
-        { field: "refreshToken", message: "Please login again" }
+      return ResponseUtil.error(res, "Token refresh failed", 500, [
+        { field: "refreshToken", message: "Internal server error. Please login again." }
       ]);
     }
   }
@@ -237,14 +290,14 @@ class AuthController {
       }
 
       // Clear refresh token cookie
-      res.clearCookie('refreshToken', { path: '/api/auth' });
+      res.clearCookie('refreshToken', { path: '/v1/api/auth' });
       
       return ResponseUtil.success(res, "Logout successful");
     } catch (error) {
       console.error("Logout error:", error);
       
       // Always clear cookie and return success for logout
-      res.clearCookie('refreshToken', { path: '/api/auth' });
+      res.clearCookie('refreshToken', { path: '/v1/api/auth' });
       return ResponseUtil.success(res, "Logout successful");
     }
   }
